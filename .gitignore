@@ -1,0 +1,13 @@
+*.exe
+*.out
+*.app
+*.elf
+*.hex
+*.list
+*.map
+*.su
+*.launch
+/Debug/
+*.sch-bak
+*.kicad_pcb-bak
+.settings/language.settings.xml
