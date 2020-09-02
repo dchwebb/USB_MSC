@@ -28,10 +28,9 @@ void InitUART() {
 
 	USART3->CR1 |= USART_CR1_UE;					// USART Enable
 
-	// configure GPIO to act as button on nucleo board (as user button is already a cv output)
-	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;
-	GPIOB->PUPDR |= GPIO_PUPDR_PUPDR11_0;			// Set pin to pull up:  01 Pull-up; 10 Pull-down; 11 Reserved
-	GPIOB->MODER &= ~GPIO_MODER_MODE11_Msk;
+	// configure PC13 user button on nucleo board
+	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOCEN;
+	GPIOC->MODER &= ~GPIO_MODER_MODE13_Msk;
 
 }
 

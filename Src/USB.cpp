@@ -79,11 +79,7 @@ void USB::USBInterruptHandler() {		// In Drivers\STM32F4xx_HAL_Driver\Src\stm32f
 					} else {
 						// Call appropriate data handler depending on endpoint of data
 						USB_EPStartXfer(Direction::out, epnum, xfer_count);
-						if (epnum == MIDI_Out) {
-							midiDataHandler((uint8_t*)xfer_buff, xfer_count);
-						} else {
-							cdcDataHandler((uint8_t*)xfer_buff, xfer_count);
-						}
+						//cdcDataHandler((uint8_t*)xfer_buff, xfer_count);
 					}
 				}
 
@@ -104,36 +100,31 @@ void USB::USBInterruptHandler() {		// In Drivers\STM32F4xx_HAL_Driver\Src\stm32f
 
 					case USB_REQ_RECIPIENT_INTERFACE:
 						if ((req.mRequest & USB_REQ_TYPE_MASK) == USB_REQ_TYPE_CLASS) {		// 0xA1 & 0x60 == 0x20
+							// FIXME see usbd_msc.c line  368>>
+							if (req.Request == BOT_GET_MAX_LUN && req.Length == 1 && (req.mRequest & USB_REQ_DIRECTION_MASK) != 0U) {		// Device to host [USBD_CtlSendData]
+								// CDC request 0xA1, 0xFE, 0x0, 0x0, 0x1		Get Maximum number of LUNs (in this case 1 - 1 = 0)
+								// 0xA1 [1|01|00001] Device to host | Class | Interface
 
-							if (req.Length > 0) {
-								if ((req.mRequest & USB_REQ_DIRECTION_MASK) != 0U) {		// Device to host [USBD_CtlSendData]
-									// CDC request 0xA1, 0x21, 0x0, 0x0, 0x7		GetLineCoding 0xA1 0x21 0 Interface 7; Data: Line Coding Data Structure
-									// 0xA1 [1|01|00001] Device to host | Class | Interface
-
-									outBuffSize = req.Length;
-									outBuff = (uint8_t*)&USBD_CDC_LineCoding;
-									ep0_state = USBD_EP0_DATA_IN;
+								outBuffSize = req.Length;
+								outBuff = (uint8_t*)&max_lun;
+								ep0_state = USBD_EP0_DATA_IN;
 
 #if (USB_DEBUG)
-									usbDebug[usbDebugNo].PacketSize = outBuffSize;
-									usbDebug[usbDebugNo].xferBuff0 = ((uint32_t*)outBuff)[0];
-									usbDebug[usbDebugNo].xferBuff1 = ((uint32_t*)outBuff)[1];
+								usbDebug[usbDebugNo].PacketSize = outBuffSize;
+								usbDebug[usbDebugNo].xferBuff0 = ((uint32_t*)outBuff)[0];
 #endif
 
-									USB_EPStartXfer(Direction::in, 0, req.Length);		// sends blank request back
-								} else {
-									//CDC request 0x21, 0x20, 0x0, 0x0, 0x7			// USBD_CtlPrepareRx
-									// 0x21 [0|01|00001] Host to device | Class | Interface
-									CmdOpCode = req.Request;
-									USB_EPStartXfer(Direction::out, epnum, req.Length);
-								}
+								USB_EPStartXfer(Direction::in, 0, req.Length);		// sends blank request back
 							} else {
-								// 0x21, 0x22, 0x0, 0x0, 0x0	SetControlLineState 0x21 | 0x22 | 2 | Interface | 0 | None
-								// 0x21, 0x20, 0x0, 0x0, 0x0	SetLineCoding       0x21 | 0x20 | 0 | Interface | 0 | Line Coding Data Structure
-								USB_EPStartXfer(Direction::in, 0, 0);
+								//CDC request 0x21, 0x20, 0x0, 0x0, 0x7			// USBD_CtlPrepareRx
+								// 0x21 [0|01|00001] Host to device | Class | Interface
+								CmdOpCode = req.Request;
+								USB_EPStartXfer(Direction::out, epnum, req.Length);
 							}
-
+						} else {
+							USB_EPStartXfer(Direction::in, 0, 0);
 						}
+
 						break;
 
 					case USB_REQ_RECIPIENT_ENDPOINT:
@@ -496,8 +487,8 @@ void USB::USBD_GetDescriptor() {
 		break;
 
 	case USB_DESC_TYPE_CONFIGURATION:
-		outBuff = CDC_MIDI_CfgFSDesc;
-		outBuffSize = sizeof(CDC_MIDI_CfgFSDesc);
+		outBuff = MSC_CfgFSDesc;
+		outBuffSize = sizeof(MSC_CfgFSDesc);
 		break;
 
 	case USB_DESC_TYPE_BOS:
@@ -536,13 +527,8 @@ void USB::USBD_GetDescriptor() {
 				outBuffSize = sizeof(USBD_StringSerial);
 			}
 			break;
-	    case USBD_IDX_MIDI_STR:				// 304
-			outBuffSize = USBD_GetString((uint8_t*)USBD_MIDI_STRING, USBD_StrDesc);
-			outBuff = USBD_StrDesc;
-	      break;
-
-	    case USBD_IDX_CDC_STR:				// 305
-			outBuffSize = USBD_GetString((uint8_t*)USBD_CDC_STRING, USBD_StrDesc);
+	    case USBD_IDX_MSC_STR:				// 304
+			outBuffSize = USBD_GetString((uint8_t*)USBD_MSC_STRING, USBD_StrDesc);
 			outBuff = USBD_StrDesc;
 	      break;
 
@@ -634,11 +620,8 @@ void USB::USBD_StdDevReq()
 			if (dev_state == USBD_STATE_ADDRESSED) {
 				dev_state = USBD_STATE_CONFIGURED;
 
-				USB_ActivateEndpoint(CDC_In,   Direction::in,  Bulk);			// Activate CDC in endpoint
-				USB_ActivateEndpoint(CDC_Out,  Direction::out, Bulk);			// Activate CDC out endpoint
-				USB_ActivateEndpoint(CDC_Cmd,  Direction::in,  Interrupt);		// Activate Command IN EP
-				USB_ActivateEndpoint(MIDI_In,  Direction::in,  Bulk);			// Activate MIDI in endpoint
-				USB_ActivateEndpoint(MIDI_Out, Direction::out, Bulk);			// Activate MIDI out endpoint
+				USB_ActivateEndpoint(MSC_In,  Direction::in,  Bulk);			// Activate MIDI in endpoint
+				USB_ActivateEndpoint(MSC_Out, Direction::out, Bulk);			// Activate MIDI out endpoint
 
 				//USB_EPStartXfer(Direction::out, req.Value, 0x40);		// FIXME maxpacket is 2 for EP 1: CUSTOM_HID_EPIN_SIZE, 0x40 = CDC_DATA_FS_OUT_PACKET_SIZE
 				ep0_state = USBD_EP0_STATUS_IN;
@@ -743,10 +726,6 @@ void USB::SendData(const uint8_t* data, uint16_t len, uint8_t endpoint) {
 			USB_EPStartXfer(Direction::in, endpoint, len);
 		}
 	}
-}
-void USB::SendString(const char* s) {
-	while (transmitting);
-	SendData((uint8_t*)s, strlen(s), CDC_In);
 }
 
 #if (USB_DEBUG)
